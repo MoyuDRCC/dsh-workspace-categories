@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Workspace Categories",
+    "description": "Adds a By category grouping to the sidebar workspaces: inline tree grouping or drill-down browsing, drag-and-drop assignment, per-category folding, and category data shared across windows."
+  }
+}

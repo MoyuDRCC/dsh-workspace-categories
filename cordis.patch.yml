@@ -1,0 +1,15 @@
+# 本插件自带 patch 层：让内置工作区浏览器整体让位。
+#
+# 内置 @deepseek-ai/dsh-client-ui-workspace 同时提供两样东西：侧栏浏览区的占用，
+# 以及共享服务 ctx.uiWorkspace（ui-sidebar / ui-conversation / ui-chat / ui-schedule
+# 等都在注入它）。所以不是"再加一个视图"，而是由本插件内的 vendor 副本整体接替：
+# 服务、两个槽位（sidebar.workspaces、conversation.hero.workspace）、五个子洞
+# 全部原样保留，只在浏览区里叠加分类层。
+#
+# 回退：停用本 bundle（不是停用行）→ 本层消失 → 内置行恢复官方默认。
+- id: ui-workspace
+  name: '@deepseek-ai/dsh-client-ui-workspace'
+  disabled: true
+- insert:
+    - id: workspace-categories
+      name: dsh-workspace-categories
