@@ -3349,7 +3349,7 @@ window.__ModuleLoader__.load({
 			// [categories] 分类模式由渲染层决定空态与行键；数据未就绪或失败时退回内置渲染。
 			const categoryLayerOn = categoryGrouping && categoryState.phase === "ready";
 			const rowKeys = categoryLayerOn ? [] : groups.length === 0 ? ["empty"] : [];
-			const renderGroup = (group, depth) => {
+			const renderGroup = (group, depth, indent = depth * 12) => {
 				const workspaceId = group.workspaceId;
 				const children = childrenByParent.get(group.key) ?? [];
 				const compatibleDrag = workspaceDrag !== null && parents.get(workspaceDrag.workspaceId) === parents.get(group.key);
@@ -3393,7 +3393,7 @@ window.__ModuleLoader__.load({
 					});
 				};
 				return (0, react_jsx_runtime.jsxs)("div", {
-					style: { "--dsh-workspace-indent": `${depth * 12}px` },
+					style: { "--dsh-workspace-indent": `${indent}px` },
 					className: clsx(WorkspaceBrowser_module_css_default.groupSection, workspaceMarker === "before" && WorkspaceBrowser_module_css_default.workspaceDropBefore, workspaceMarker === "after" && WorkspaceBrowser_module_css_default.workspaceDropAfter),
 					onDragOver: workspaceDrag === null ? void 0 : (e) => {
 						e.preventDefault();
@@ -3527,7 +3527,45 @@ window.__ModuleLoader__.load({
 					]
 				}, group.key);
 			};
+			// [categories] 分类拖动排序：源分类插到目标分类的前/后半区。
+			const [categoryDrag, setCategoryDrag] = (0, react.useState)(null);
+			const commitCategoryDrag = (activeDrag, over) => {
+				if (activeDrag === null || over === null || activeDrag.id === over.id) return;
+				const ids = categoryState.categories.map((category) => category.id);
+				if (!ids.includes(activeDrag.id) || !ids.includes(over.id)) return;
+				const next = ids.filter((id) => id !== activeDrag.id);
+				const anchor = next.indexOf(over.id);
+				next.splice(anchor + (over.half === "after" ? 1 : 0), 0, activeDrag.id);
+				if (next.join() === ids.join()) return;
+				categoryOps.reorder(next).catch(reportCategoryError);
+			};
+			/** 分类行的拖动/落点 props；未分类桶固定在末尾，不参与排序。 */
+			const categoryDragProps = (bucket) => bucket.id === CATEGORY_UNASSIGNED ? {} : {
+				dragBegin: () => {
+					setCategoryDrag({
+						id: bucket.id,
+						overId: null,
+						half: null
+					});
+				},
+				dragEnd: () => {
+					setCategoryDrag(null);
+				},
+				dragOverHalf: categoryDrag !== null && categoryDrag.overId === bucket.id ? categoryDrag.half : null,
+				onReorderOver: (half) => {
+					setCategoryDrag((active) => active === null ? active : {
+						...active,
+						overId: bucket.id,
+						half
+					});
+				},
+				onReorderDrop: (half) => {
+					if (categoryDrag !== null) commitCategoryDrag(categoryDrag, { id: bucket.id, half });
+					setCategoryDrag(null);
+				}
+			};
 			// [categories] 按分类：分类桶包住原有的工作区分组；进入式在根级与分类内两级切换。
+			const categoryColors = categoryColorMap(categoryState.categories);
 			const renderedGroups = [];
 			if (categoryLayerOn) {
 				const buckets = categoryBuckets(rootGroups, categoryState.categories, categoryState.assignments);
@@ -3581,6 +3619,7 @@ window.__ModuleLoader__.load({
 							rowKey: key,
 							label: bucketLabel(bucket),
 							count: bucket.groups.length,
+							color: categoryColors.get(bucket.id) ?? CATEGORY_UNASSIGNED_COLOR,
 							expanded: false,
 							entry: true,
 							active: currentWorkspaceId !== void 0 && bucket.groups.some((group) => group.workspaceId === currentWorkspaceId),
@@ -3594,6 +3633,7 @@ window.__ModuleLoader__.load({
 								openDelete(bucket);
 							},
 							onDropWorkspace: dropInto(bucket),
+							...categoryDragProps(bucket),
 							t
 						}, key));
 					}
@@ -3614,6 +3654,7 @@ window.__ModuleLoader__.load({
 							rowKey: key,
 							label: bucketLabel(bucket),
 							count: bucket.groups.length,
+							color: categoryColors.get(bucket.id) ?? CATEGORY_UNASSIGNED_COLOR,
 							expanded: !folded,
 							active: currentWorkspaceId !== void 0 && bucket.groups.some((group) => group.workspaceId === currentWorkspaceId),
 							onActivate: () => {
@@ -3629,10 +3670,11 @@ window.__ModuleLoader__.load({
 								openDelete(bucket);
 							},
 							onDropWorkspace: dropInto(bucket),
+							...categoryDragProps(bucket),
 							t
 						}, key));
 						if (folded) continue;
-						for (const group of bucket.groups) renderedGroups.push(renderGroup(group, 1));
+						for (const group of bucket.groups) renderedGroups.push(renderGroup(group, 1, CATEGORY_CHILD_INDENT));
 					}
 				}
 			} else {
@@ -5994,6 +6036,46 @@ window.__ModuleLoader__.load({
 		const CATEGORY_UNASSIGNED = "";
 		/** 拖拽类型：工作区行在 dragstart 时写入，分类头只接受这种载荷。 */
 		const CATEGORY_DRAG_TYPE = "application/x-dsh-workspace-categories";
+		/** 分类排序的拖拽类型：与工作区归类区分开。 */
+		const CATEGORY_ORDER_DRAG_TYPE = "application/x-dsh-category-order";
+		/** 分类色板：相邻索引色相相差最大，保证同时出现的分类容易区分。 */
+		const CATEGORY_COLORS = [
+			"#EB5757", "#2D9CDB", "#F2994A", "#27AE60",
+			"#9B51E0", "#D4A72C", "#16A085", "#E2688C",
+			"#4E7CF6", "#A0764A", "#BB6BD9", "#5B8DEF"
+		];
+		/** 未分类桶的中性色。 */
+		const CATEGORY_UNASSIGNED_COLOR = "#8A9099";
+		/** 分类成员的缩进：让文件夹图标与分类头的展开箭头对齐（16 图标 + 6 间距）。 */
+		const CATEGORY_CHILD_INDENT = 22;
+		/** 分类 id 的稳定散列：同一分类重命名、重排后仍是同一基色。 */
+		function categoryHash(categoryId) {
+			let hash = 2166136261;
+			for (const ch of categoryId) {
+				hash ^= ch.codePointAt(0);
+				hash = Math.imul(hash, 16777619) >>> 0;
+			}
+			return hash;
+		}
+		/** 按分类顺序分配颜色：同色的下一个分类顺延到色板里的下一个颜色。 */
+		function categoryColorMap(categories) {
+			const used = new Set();
+			const colors = new Map();
+			for (const category of categories) {
+				const base = categoryHash(category.id) % CATEGORY_COLORS.length;
+				let assigned;
+				for (let step = 0; step < CATEGORY_COLORS.length; step += 1) {
+					const candidate = CATEGORY_COLORS[(base + step) % CATEGORY_COLORS.length];
+					if (used.has(candidate)) continue;
+					assigned = candidate;
+					break;
+				}
+				assigned = assigned ?? CATEGORY_COLORS[base];
+				used.add(assigned);
+				colors.set(category.id, assigned);
+			}
+			return colors;
+		}
 		/** 分类数据：Host 是唯一权威，本地只是快照。 */
 		const categoryData = (0, _deepseek_ai_dsh_client_store.createSnapshotStore)({
 			phase: "loading",
@@ -6092,6 +6174,13 @@ window.__ModuleLoader__.load({
 				const { categories, assignments } = categoryData.getSnapshot();
 				const remaining = Object.fromEntries(Object.entries(assignments).filter(([, id]) => id !== categoryId));
 				return saveCategories(categories.filter((category) => category.id !== categoryId), remaining);
+			},
+			/** 按给定的 id 顺序重排分类；未列出的分类保持相对顺序殿后。 */
+			reorder(ids) {
+				const { categories, assignments } = categoryData.getSnapshot();
+				const rank = new Map(ids.map((id, index) => [id, index]));
+				const next = [...categories].sort((a, b) => (rank.get(a.id) ?? ids.length) - (rank.get(b.id) ?? ids.length));
+				return saveCategories(next, assignments);
 			}
 		};
 		/** 订阅分类数据。 */
@@ -6136,15 +6225,15 @@ window.__ModuleLoader__.load({
 			if (unassigned.groups.length > 0) buckets.push(unassigned);
 			return buckets;
 		}
-		/** 分类标记：2×2 方块表达"一组"，与工作区的文件夹图标明显区分。 */
-		function CategoryGlyph() {
+		/** 分类标记：2×2 彩色方块表达"一组"，与工作区的文件夹图标明显区分。 */
+		function CategoryGlyph({ color = "currentColor" }) {
 			const square = (x, y) => (0, react_jsx_runtime.jsx)("rect", {
 				x,
 				y,
 				width: 4.4,
 				height: 4.4,
 				rx: 1,
-				stroke: "currentColor"
+				fill: color
 			}, `${x}-${y}`);
 			return (0, react_jsx_runtime.jsxs)("svg", {
 				width: 16,
@@ -6153,13 +6242,16 @@ window.__ModuleLoader__.load({
 				fill: "none",
 				xmlns: "http://www.w3.org/2000/svg",
 				"aria-hidden": "true",
-				strokeWidth: 1,
 				children: [square(2.6, 2.6), square(9, 2.6), square(2.6, 9), square(9, 9)]
 			});
 		}
-		/** 视图菜单与右键菜单里的"按分类"图标。 */
+		/** 视图菜单里的"按分类"图标：用强调色。 */
 		function CategoryMenuIcon() {
-			return (0, react_jsx_runtime.jsx)(CategoryGlyph, {});
+			return (0, react_jsx_runtime.jsx)(CategoryGlyph, { color: "var(--dsw-alias-brand-primary)" });
+		}
+		/** 右键菜单里的分类图标：颜色随分类，由菜单项携带。 */
+		function CategoryColorIcon({ icon }) {
+			return (0, react_jsx_runtime.jsx)(CategoryGlyph, { color: icon?.color ?? "currentColor" });
 		}
 		/** 计数文字：分类行与返回行共用同一套样式。 */
 		function categoryCountStyle() {
@@ -6172,10 +6264,11 @@ window.__ModuleLoader__.load({
 				flex: "none"
 			};
 		}
-		/** 树形分类头与进入式分类行共用：图标、名称、计数与 ⋯ 菜单。 */
-		function CategoryRow({ rowKey, label, count, expanded, entry, active, onActivate, onRename, onRemove, onDropWorkspace, t }) {
+		/** 树形分类头与进入式分类行共用：彩色图标、名称、计数、拖动排序与 ⋯ 菜单。 */
+		function CategoryRow({ rowKey, label, count, color, expanded, entry, active, onActivate, onRename, onRemove, onDropWorkspace, dragBegin, dragEnd, dragOverHalf, onReorderOver, onReorderDrop, t }) {
 			const [menuOpen, setMenuOpen] = (0, react.useState)(false);
 			const [dropActive, setDropActive] = (0, react.useState)(false);
+			const reorderable = dragBegin !== void 0 && onReorderOver !== void 0 && onReorderDrop !== void 0;
 			const items = [{
 				id: "rename",
 				label: t("category.rename"),
@@ -6186,26 +6279,61 @@ window.__ModuleLoader__.load({
 				icon: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconTrashOutlineRegular, {}),
 				danger: true
 			}]];
+			const marker = dragOverHalf ?? null;
+			const dragStyle = dropActive ? {
+				background: "var(--dsw-alias-interactive-bg-hover)",
+				boxShadow: "inset 0 0 0 1px var(--dsw-alias-brand-primary)"
+			} : marker === "before" ? {
+				boxShadow: "inset 0 2px 0 var(--dsw-alias-brand-primary)"
+			} : marker === "after" ? {
+				boxShadow: "inset 0 -2px 0 var(--dsw-alias-brand-primary)"
+			} : void 0;
 			return (0, react_jsx_runtime.jsxs)("div", {
 				"data-row-key": rowKey,
 				role: "treeitem",
+				draggable: reorderable,
 				"aria-expanded": entry ? void 0 : expanded,
 				className: clsx(Rows_module_css_default.projectRow, menuOpen && Rows_module_css_default.menuOpen),
-				style: dropActive ? {
-					background: "var(--dsw-alias-interactive-bg-hover)",
-					boxShadow: "inset 0 0 0 1px var(--dsw-alias-brand-primary)"
-				} : void 0,
+				style: dragStyle,
 				onClick: onActivate,
-				onDragOver: onDropWorkspace === void 0 ? void 0 : (event) => {
-					if (!event.dataTransfer.types.includes(CATEGORY_DRAG_TYPE)) return;
+				onDragStart: reorderable ? (event) => {
+					event.dataTransfer.effectAllowed = "move";
+					event.dataTransfer.setData(CATEGORY_ORDER_DRAG_TYPE, rowKey);
+					dragBegin();
+				} : void 0,
+				onDragEnd: reorderable ? () => {
+					dragEnd?.();
+				} : void 0,
+				onDragOver: reorderable ? (event) => {
+					const types = event.dataTransfer.types;
+					if (types.includes(CATEGORY_ORDER_DRAG_TYPE)) {
+						event.preventDefault();
+						event.dataTransfer.dropEffect = "move";
+						onReorderOver(rowHalf(event));
+						return;
+					}
+					if (onDropWorkspace === void 0 || !types.includes(CATEGORY_DRAG_TYPE)) return;
+					event.preventDefault();
+					event.dataTransfer.dropEffect = "move";
+					if (!dropActive) setDropActive(true);
+				} : (event) => {
+					if (onDropWorkspace === void 0 || !event.dataTransfer.types.includes(CATEGORY_DRAG_TYPE)) return;
 					event.preventDefault();
 					event.dataTransfer.dropEffect = "move";
 					if (!dropActive) setDropActive(true);
 				},
-				onDragLeave: onDropWorkspace === void 0 ? void 0 : () => {
+				onDragLeave: () => {
 					setDropActive(false);
 				},
-				onDrop: onDropWorkspace === void 0 ? void 0 : (event) => {
+				onDrop: (event) => {
+					const types = event.dataTransfer.types;
+					if (reorderable && types.includes(CATEGORY_ORDER_DRAG_TYPE)) {
+						event.preventDefault();
+						event.stopPropagation();
+						onReorderDrop(rowHalf(event));
+						return;
+					}
+					if (onDropWorkspace === void 0 || !types.includes(CATEGORY_DRAG_TYPE)) return;
 					event.preventDefault();
 					event.stopPropagation();
 					setDropActive(false);
@@ -6215,11 +6343,8 @@ window.__ModuleLoader__.load({
 				children: [
 					(0, react_jsx_runtime.jsx)("span", {
 						className: Rows_module_css_default.slot,
-						style: {
-							display: "inline-flex",
-							color: active ? "var(--dsw-alias-brand-primary)" : "var(--dsw-alias-label-secondary)"
-						},
-						children: (0, react_jsx_runtime.jsx)(CategoryGlyph, {})
+						style: { display: "inline-flex" },
+						children: (0, react_jsx_runtime.jsx)(CategoryGlyph, { color })
 					}),
 					(0, react_jsx_runtime.jsx)("span", {
 						className: clsx(Rows_module_css_default.slot, Rows_module_css_default.chevron),
@@ -6232,6 +6357,7 @@ window.__ModuleLoader__.load({
 						className: Rows_module_css_default.projectText,
 						children: (0, react_jsx_runtime.jsx)("span", {
 							className: Rows_module_css_default.title,
+							style: active ? { fontWeight: 600 } : void 0,
 							children: label
 						})
 					}),
@@ -6256,6 +6382,7 @@ window.__ModuleLoader__.load({
 							closeOnPointerLeave: true,
 							anchor: (0, react_jsx_runtime.jsx)("button", {
 								type: "button",
+								draggable: false,
 								className: Rows_module_css_default.iconButton,
 								"aria-label": t("category.actions.aria", { name: label }),
 								onClick: (event) => {
@@ -6613,7 +6740,8 @@ window.__ModuleLoader__.load({
 					"workspace.unarchive": _deepseek_ai_dsh_client_ui_primitives.IconUnarchiveOutlineRegular,
 					"workspace.fork": _deepseek_ai_dsh_client_ui_primitives.IconBranchOutlineRegular,
 					"workspace.copy": _deepseek_ai_dsh_client_ui_primitives.IconCopyOutlineRegular,
-					"workspace.category": CategoryMenuIcon
+					"workspace.category": CategoryMenuIcon,
+					"workspace.category-color": CategoryColorIcon
 				})) yield ctx.slots.register({
 					name: "contextMenu.icon",
 					key
@@ -6666,6 +6794,7 @@ window.__ModuleLoader__.load({
 						}
 					}];
 					const current = categoryOf(assignments, workspaceId);
+					const colors = categoryColorMap(categories);
 					return [{
 						id: "category",
 						label: label("category.moveTo"),
@@ -6674,6 +6803,10 @@ window.__ModuleLoader__.load({
 						children: [...categories.map((category) => ({
 							id: `assign:${category.id}`,
 							label: category.name,
+							icon: {
+								key: "workspace.category-color",
+								color: colors.get(category.id) ?? CATEGORY_UNASSIGNED_COLOR
+							},
 							disabled: current === category.id,
 							run: () => {
 								categoryOps.assign(workspaceId, category.id).catch(reportCategoryError);
@@ -6681,6 +6814,10 @@ window.__ModuleLoader__.load({
 						})), {
 							id: "assign:",
 							label: label("category.remove"),
+							icon: {
+								key: "workspace.category-color",
+								color: CATEGORY_UNASSIGNED_COLOR
+							},
 							disabled: current === CATEGORY_UNASSIGNED,
 							run: () => {
 								categoryOps.assign(workspaceId, CATEGORY_UNASSIGNED).catch(reportCategoryError);
