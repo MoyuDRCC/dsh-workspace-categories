@@ -1,7 +1,7 @@
 # 工作区分类
 
 为 DSH（DeepSeek Harness）侧栏的工作区列表增加一层**自定义分类**：把十几个平铺的工作区收进
-「项目 A / DSH 插件 / 客户项目」这样的桶里，需要时再展开。
+「项目 A / 自研插件 / 客户项目」这样的桶里，需要时再展开。
 
 分类是纯视图层数据，不改写任何内置记录——工作区、会话、归档与置顶状态全部保持官方行为。
 
@@ -112,7 +112,7 @@ ${DSH_HOME}/plugin-data/dsh-workspace-categories/state.json
   "rev": 12,
   "categories": [
     { "id": "cat_example1", "name": "项目 A" },
-    { "id": "cat_example2", "name": "DSH 插件" }
+    { "id": "cat_example2", "name": "自研插件" }
   ],
   "assignments": {
     "0f8c2b7d-…-workspace-id": "cat_example1"
