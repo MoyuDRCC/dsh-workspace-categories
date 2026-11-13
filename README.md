@@ -191,7 +191,6 @@ PUT  /api/dsh-workspace-categories/state   { rev, categories, assignments }
 | `client.js` | 客户端半边：内置浏览器副本 + 分类层（单文件模块，无构建步骤） |
 | `cordis.patch.yml` | 本插件自带的 patch 层：禁用内置行、插入本插件行 |
 | `locale/*.json` | 插件的标题与描述（8 种语言文案在 `client.js` 内） |
-| `docs/design.md` | 完整设计方案：实测事实、路线对比、改动清单、风险 |
 
 `client.js` 即发布产物，直接由 DSH 的客户端模块加载器读取，仓库里没有构建脚本。
 
