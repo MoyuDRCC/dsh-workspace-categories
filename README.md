@@ -5,7 +5,7 @@
 
 分类是纯视图层数据，不改写任何内置记录——工作区、会话、归档与置顶状态全部保持官方行为。
 
-- 版本：0.2.0 · 许可：MIT · 适配 DSH：`0.2.2-rc.1`
+- 版本：0.2.1 · 许可：MIT · 适配 DSH：`0.2.2-rc.2`
 - 界面语言：简体中文 / English / 日本語 / Español / Français / Deutsch / Русский / Português
 
 ---
@@ -29,7 +29,7 @@
 
 ## 安装
 
-要求 DSH `0.2.2-rc.1`（`package.json` 的 `engines.dsh`）。
+要求 DSH `>=0.2.2-rc.2 <0.3.0`（`package.json` 的 `engines.dsh`）。
 
 **推荐**：在 DSH 的插件管理里安装本目录，插件管理器会把本包登记进 profile 的依赖与 bundle 清单。
 

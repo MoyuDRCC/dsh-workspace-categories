@@ -1,6 +1,6 @@
 # 第三方组件说明
 
-`client.js` 是内置包 `@deepseek-ai/dsh-client-ui-workspace@0.2.2-rc.1` 的副本，
+`client.js` 是内置包 `@deepseek-ai/dsh-client-ui-workspace@0.2.2-rc.2` 的副本，
 在其基础上叠加了分类层（本文件有明确标记的 `workspace-categories` 区域与若干处
 精确改动）。上游包以 MIT 许可发布，原始版权声明如下。
 
